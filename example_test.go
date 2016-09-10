@@ -1,4 +1,4 @@
-package oauth2_test
+package moauth2_test
 
 import (
 	"testing"
