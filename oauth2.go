@@ -87,8 +87,7 @@ func (t *token) String() string {
 }
 
 // NewOAuth2Provider returns a generic OAuth 2.0 backend endpoint.
-func NewOAuth2Provider(conf *oauth2.Config) martini.Handler {
-
+func NewOAuth2Provider(conf *oauth2.Config, then func(sessions.Session, Tokens) error) martini.Handler {
 	return func(s sessions.Session, c martini.Context, w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			switch r.URL.Path {
@@ -97,7 +96,7 @@ func NewOAuth2Provider(conf *oauth2.Config) martini.Handler {
 			case PathLogout:
 				logout(s, w, r)
 			case PathCallback:
-				handleOAuth2Callback(conf, s, w, r)
+				handleOAuth2Callback(conf, s, w, r, then)
 			}
 		}
 		tk := unmarshallToken(s)
@@ -147,7 +146,7 @@ func logout(s sessions.Session, w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, next, codeRedirect)
 }
 
-func handleOAuth2Callback(f *oauth2.Config, s sessions.Session, w http.ResponseWriter, r *http.Request) {
+func handleOAuth2Callback(f *oauth2.Config, s sessions.Session, w http.ResponseWriter, r *http.Request, then func(sessions.Session, Tokens) error) {
 	next := extractPath(r.URL.Query().Get("state"))
 	code := r.URL.Query().Get("code")
 	t, err := f.Exchange(oauth2.NoContext, code)
@@ -160,6 +159,14 @@ func handleOAuth2Callback(f *oauth2.Config, s sessions.Session, w http.ResponseW
 	// Store the credentials in the session.
 	val, _ := json.Marshal(t)
 	s.Set(keyToken, val)
+
+	tk := unmarshallToken(s)
+
+	err = then(s, tk)
+	if err != nil {
+		http.Redirect(w, r, PathError, codeRedirect)
+		return
+	}
 
 	http.Redirect(w, r, next, codeRedirect)
 }
